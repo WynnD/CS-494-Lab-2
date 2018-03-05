@@ -6,10 +6,11 @@ import java.time.Clock;
 ControlP5 cp5;
 Clock time;
 Serial myPort;
-controlP5.Textlabel hr;
+controlP5.Textarea hr;
 BufferedReader reader;
 
 boolean beat = true;
+boolean use_file = true;
 int xPos = 1;
 float height_old = 0;
 float height_new = 0;
@@ -27,6 +28,11 @@ HashMap<String, Integer> colors;
 
 void setup() {
   reader = createReader("hr_data.txt");
+  try {
+    use_file = reader.ready();
+  } catch (Exception e) {
+    use_file = false;
+  }
   PFont pfont = createFont("arial",30);
   ControlFont font = new ControlFont(pfont,18);
   frameRate(1000);
@@ -47,8 +53,6 @@ void setup() {
                .setView(Chart.LINE) // use Chart.LINE, Chart.PIE, Chart.AREA, Chart.BAR_CENTERED
                .setStrokeWeight(2.5)
                ;
-  // myPort = new Serial(this, Serial.list()[1], 9600);
-  // myPort.bufferUntil('\n');
 
   myChart.addDataSet("heart_rate");
   myChart.setData("heart_rate", new float[980]);
@@ -95,38 +99,40 @@ void setup() {
      .setFont(createFont("arial",25))
      .setPosition(10, 560)
      .setValue("HR:");
-   hr = cp5.addTextlabel("HR")
+   hr = cp5.addTextarea("HR")
      .setFont(createFont("arial",25))
      .setPosition(60,560)
      ;
+   if (!use_file) {
+    try {
+    myPort = new Serial(this, Serial.list()[1], 9600);
+    myPort.bufferUntil('\n');
+    } catch (Exception e) {
+      hr.setText("NO SERIAL");
+    }
+  }
 }
 
 
 
 void draw() {
-//  random_shit();
-  try {
-    String line = reader.readLine();
-    inByte = float(line);
-    if (!Float.isNaN(inByte))
-      changed = true;
-  } catch (Exception e) {
-    e.printStackTrace();
-    reader = createReader("hr_data.txt");
-    changed = false;
+  background(0x444444);
+  
+  if (use_file) {
+    readFromFile();
   }
   
-  if (!beat && inByte > 700) {
+  if (!beat && inByte > 725) {
     beat = true;
     long beat_time = time.millis();
     if (last_beat != 0) {
       beat_length = beat_time - last_beat;
     }
-    hr.setValue(calcHr());
+    hr.setText(calcHr());
     last_beat = beat_time;
   }
   
-  if (beat && inByte < 700) {
+  if (beat && inByte < 725) {
     beat = false;
   }
 
@@ -137,15 +143,28 @@ void draw() {
   }
 }
 
+void readFromFile() {
+    try {
+      String line = reader.readLine();
+      inByte = float(line);
+      if (!Float.isNaN(inByte))
+        changed = true;
+    } catch (Exception e) {
+      e.printStackTrace();
+      reader = createReader("hr_data.txt");
+      changed = false;
+    }
+}
+
 String calcHr() {
   int hr;
   double sec_per_beat = beat_length/1000.0;
   Double min_per_beat = sec_per_beat/60.0;
   hr = (int)(1/min_per_beat);
-  if (hr < 200) {
+  if (hr < 220) {
     return Integer.toString(hr);
   } else {
-    return "N/A";
+    return "";
   }
 }
 
@@ -174,10 +193,6 @@ void serialEvent (Serial myPort) {
      // at the edge of the screen, go back to the beginning:
      changed = true;   
   }
-}
-
-int calcHeartRate() {
-  return 0; // they dead
 }
 
 void random_shit () {
