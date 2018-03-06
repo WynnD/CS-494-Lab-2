@@ -6,27 +6,34 @@ import java.time.Clock;
 ControlP5 cp5;
 Clock time;
 Serial myPort;
-controlP5.Textarea hr;
+controlP5.Textarea hr_text;
+controlP5.Textarea zone_text;
+controlP5.Textarea base_hr_text;
 BufferedReader reader;
 
+ArrayList prev_heart_rates;
 boolean beat = true;
 boolean use_file = true;
 int xPos = 1;
+int hr;
 float height_old = 0;
 float height_new = 0;
 float inByte = 0;
 boolean changed = false;
-Chart myChart;
+Chart hrChart, respChart;
 int counter = 0;
 String textValue = "";
 int age;
 int[] zones;
 double beat_length = 0;
 double last_beat = 0;
-
+long start_time;
+float last_hr_datapoint = 0;
+float second_last_hr_datapoint = 0;
 HashMap<String, Integer> colors;
 
 void setup() {
+  prev_heart_rates = new ArrayList<Integer>();
   reader = createReader("hr_data.txt");
   try {
     use_file = reader.ready();
@@ -35,29 +42,40 @@ void setup() {
   }
   PFont pfont = createFont("arial",30);
   ControlFont font = new ControlFont(pfont,18);
-  frameRate(1000);
+  frameRate(100);
   
   cp5 = new ControlP5(this);
   time = Clock.systemUTC();
+  start_time = time.millis();
   colors = new HashMap<String, Integer>();
   colors.put("red", #FF0000);
   colors.put("orange", #FFA500);
   colors.put("green", #00FF00);
   colors.put("blue", #00BFFF);
   colors.put("grey", #F0F8FF);
+
   zones = new int[5];
-  myChart = cp5.addChart("dataflow")
+  hrChart = cp5.addChart("hr chart")
                .setPosition(220, 0)
-               .setSize(980, 600)
-               .setRange(0, 1023)
+               .setSize(980, 300)
+               .setRange(1023-900, 900)
                .setView(Chart.LINE) // use Chart.LINE, Chart.PIE, Chart.AREA, Chart.BAR_CENTERED
                .setStrokeWeight(2.5)
                ;
+  respChart = cp5.addChart("resp chart")
+              .setPosition(220, 300)
+              .setSize(980, 300)
+              .setRange(1023-900, 900)
+              .setView(Chart.LINE) // use Chart.LINE, Chart.PIE, Chart.AREA, Chart.BAR_CENTERED
+              .setStrokeWeight(2.5)
+              ;
 
-  myChart.addDataSet("heart_rate");
-  myChart.setData("heart_rate", new float[980]);
-  myChart.setColors("heart_rate",#FF0000);
-  myChart.getColor().setBackground(#000000);
+  hrChart.addDataSet("heart_rate");
+  hrChart.setData("heart_rate", new float[490]);
+  hrChart.setColors("heart_rate",#FFFFFF);
+  hrChart.getColor().setBackground(#000000);
+  respChart.addDataSet("resp_rate");
+  respChart.setData("resp_rate",new float[490]);
   size(1200,600);
   background(0x444444);
   
@@ -95,11 +113,30 @@ void setup() {
      .getCaptionLabel()
      .setFont(font)
      ;
+   cp5.addTextlabel("Zone label")
+     .setFont(createFont("arial",25))
+     .setPosition(10, 500)
+     .setValue("Zone:");
+   zone_text = cp5.addTextarea("Zone")
+     .setFont(createFont("arial", 25))
+     .setPosition(90, 500)
+     .setText("N/A")
+     ;
+   cp5.addTextlabel("Avg HR label")
+     .setFont(createFont("arial", 25))
+     .setPosition(10, 530)
+     .setValue("Base HR:")
+     ;
+   base_hr_text = cp5.addTextarea("Avg HR")
+     .setFont(createFont("arial", 25))
+     .setPosition(130, 530)
+     .setText("N/A")
+     ;
    cp5.addTextlabel("HR label")
      .setFont(createFont("arial",25))
      .setPosition(10, 560)
      .setValue("HR:");
-   hr = cp5.addTextarea("HR")
+   hr_text = cp5.addTextarea("HR")
      .setFont(createFont("arial",25))
      .setPosition(60,560)
      ;
@@ -108,38 +145,80 @@ void setup() {
     myPort = new Serial(this, Serial.list()[1], 9600);
     myPort.bufferUntil('\n');
     } catch (Exception e) {
-      hr.setText("NO SERIAL");
+      hr_text.setText("NO SERIAL");
     }
   }
 }
 
-
+boolean retrieved_avg = false;
 
 void draw() {
   background(0x444444);
   
-  if (use_file) {
-    readFromFile();
+  if (!retrieved_avg && time.millis() - start_time > 30000) {
+    int avg = getAvgHr();
+    base_hr_text.setText(Integer.toString(avg));
+    retrieved_avg = true;
   }
   
-  if (!beat && inByte > 725) {
+  if (use_file) {
+    for (int i = 0; i < 5; ++i)
+      readFromFile();
+  }
+  
+  if (!beat && inByte > 700) {
     beat = true;
     long beat_time = time.millis();
     if (last_beat != 0) {
       beat_length = beat_time - last_beat;
     }
-    hr.setText(calcHr());
+    hr_text.setText(calcHr());
+    setChartColor();
     last_beat = beat_time;
   }
   
-  if (beat && inByte < 725) {
+  if (beat && inByte < 700) {
     beat = false;
   }
 
   if (changed) {
-     myChart.push("heart_rate", inByte);
+    float smoothed_val = smoothHrVal(inByte);
+     hrChart.push("heart_rate", smoothed_val);
      changed = false;
      counter++;
+  }
+}
+
+float smoothHrVal(float newVal) {
+  float smoothed_val;
+  if (last_hr_datapoint != 0) {
+    if (second_last_hr_datapoint != 0) {
+      smoothed_val = (second_last_hr_datapoint+last_hr_datapoint*3+newVal*5)/9;
+      second_last_hr_datapoint = last_hr_datapoint;
+    } else {
+      smoothed_val = newVal;
+      second_last_hr_datapoint = last_hr_datapoint;
+    }
+  } else {
+    smoothed_val = newVal;
+  }
+  last_hr_datapoint = newVal;
+
+  return smoothed_val;
+}
+
+void setChartColor() {
+  String[] colors_array = {"grey", "blue", "green", "orange", "red"};
+  String[] zones_array = {"very light", "light", "moderate", "hard", "maximum"};
+  for (int i = 0; i < zones.length; ++i) {
+    println(hr);
+    println(zones[i]);
+    if (hr < zones[i]) {
+      hrChart.setColors("heart_rate", colors.get(colors_array[i]));
+      zone_text.setText(zones_array[i]);
+      println(i+1);
+      return;
+    }
   }
 }
 
@@ -150,24 +229,30 @@ void readFromFile() {
       if (!Float.isNaN(inByte))
         changed = true;
     } catch (Exception e) {
-      e.printStackTrace();
       reader = createReader("hr_data.txt");
       changed = false;
     }
 }
 
 String calcHr() {
-  int hr;
   double sec_per_beat = beat_length/1000.0;
   Double min_per_beat = sec_per_beat/60.0;
   hr = (int)(1/min_per_beat);
   if (hr < 220) {
+    prev_heart_rates.add(hr);
     return Integer.toString(hr);
   } else {
     return "";
   }
 }
 
+int getAvgHr() {
+  int sum = 0;
+  for (Object hr : prev_heart_rates.toArray()) {
+    sum += (int) hr;
+  }
+  return sum/prev_heart_rates.size();
+}
 
 void serialEvent (Serial myPort) {
   // get the ASCII string:
@@ -209,9 +294,6 @@ void calcZones(int age) {
   
   println(zones);
 }
-
-// 700 as beat threshhold
-
 
 
 // EVENT HANDLERS
