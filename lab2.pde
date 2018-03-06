@@ -193,7 +193,7 @@ float smoothHrVal(float newVal) {
   float smoothed_val;
   if (last_hr_datapoint != 0) {
     if (second_last_hr_datapoint != 0) {
-      smoothed_val = (second_last_hr_datapoint+last_hr_datapoint*3+newVal*5)/9;
+      smoothed_val = (second_last_hr_datapoint+last_hr_datapoint*2+newVal*3)/6;
       second_last_hr_datapoint = last_hr_datapoint;
     } else {
       smoothed_val = newVal;
