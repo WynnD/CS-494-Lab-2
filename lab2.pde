@@ -2,16 +2,17 @@ import controlP5.*;
 import processing.serial.*;
 import java.util.HashMap;
 import java.time.Clock;
+import java.lang.Math.*;
 
 ControlP5 cp5;
 Clock time;
 Serial myPort;
 controlP5.Textarea hr_text;
 controlP5.Textarea zone_text;
-controlP5.Textarea base_hr_text;
+controlP5.Textarea base_hr_text, resp_text, resp_base_text;
 BufferedReader reader;
 
-ArrayList prev_heart_rates;
+ArrayList prev_heart_rates, prev_resp;
 boolean beat = true;
 boolean use_file = true;
 int xPos = 1;
@@ -19,7 +20,8 @@ int hr;
 float height_old = 0;
 float height_new = 0;
 float inByte = 0;
-boolean changed = false;
+boolean hr_changed = false;
+boolean resp_changed = false;
 Chart hrChart, respChart;
 int counter = 0;
 String textValue = "";
@@ -30,10 +32,13 @@ double last_beat = 0;
 long start_time;
 float last_hr_datapoint = 0;
 float second_last_hr_datapoint = 0;
+float last_resp_datapoint = 0;
+float second_last_resp_datapoint = 0;
 HashMap<String, Integer> colors;
 
 void setup() {
   prev_heart_rates = new ArrayList<Integer>();
+  prev_resp = new ArrayList<Float>();
   reader = createReader("hr_data.txt");
   try {
     use_file = reader.ready();
@@ -65,7 +70,7 @@ void setup() {
   respChart = cp5.addChart("resp chart")
               .setPosition(220, 300)
               .setSize(980, 300)
-              .setRange(1023-900, 900)
+              .setRange(1023, 0)
               .setView(Chart.LINE) // use Chart.LINE, Chart.PIE, Chart.AREA, Chart.BAR_CENTERED
               .setStrokeWeight(2.5)
               ;
@@ -76,6 +81,8 @@ void setup() {
   hrChart.getColor().setBackground(#000000);
   respChart.addDataSet("resp_rate");
   respChart.setData("resp_rate",new float[490]);
+  respChart.setColors("resp_rate",#FFFFFF);
+  respChart.getColor().setBackground(#111111);
   size(1200,600);
   background(0x444444);
   
@@ -113,6 +120,23 @@ void setup() {
      .getCaptionLabel()
      .setFont(font)
      ;
+   
+   cp5.addTextlabel("RESP base label")
+     .setFont(createFont("arial",25))
+     .setPosition(10, 440)
+     .setValue("RESP Avg Val:");
+   resp_base_text = cp5.addTextarea("RESP base")
+     .setFont(createFont("arial",25))
+     .setPosition(150,440)
+     ;
+   cp5.addTextlabel("RESP label")
+     .setFont(createFont("arial",25))
+     .setPosition(10, 470)
+     .setValue("RESP Rate:");
+   resp_text = cp5.addTextarea("RESP")
+     .setFont(createFont("arial",25))
+     .setPosition(150,470)
+     ;
    cp5.addTextlabel("Zone label")
      .setFont(createFont("arial",25))
      .setPosition(10, 500)
@@ -140,6 +164,7 @@ void setup() {
      .setFont(createFont("arial",25))
      .setPosition(60,560)
      ;
+   
    if (!use_file) {
     try {
     myPort = new Serial(this, Serial.list()[1], 9600);
@@ -157,7 +182,9 @@ void draw() {
   
   if (!retrieved_avg && time.millis() - start_time > 30000) {
     int avg = getAvgHr();
+    float resp_avg = getAvgRespVal();
     base_hr_text.setText(Integer.toString(avg));
+    resp_base_text.setText(Float.toString(resp_avg));
     retrieved_avg = true;
   }
   
@@ -181,11 +208,18 @@ void draw() {
     beat = false;
   }
 
-  if (changed) {
+  if (hr_changed) {
     float smoothed_val = smoothHrVal(inByte);
      hrChart.push("heart_rate", smoothed_val);
-     changed = false;
+     hr_changed = false;
      counter++;
+  }
+  float inByteResp = fakeBreathData();
+  if (resp_changed) {
+    cacheResp(inByteResp);
+    float smoothed_val = smoothRespVal(inByteResp);
+    respChart.push("resp_rate", smoothed_val);
+    resp_changed = false;
   }
 }
 
@@ -207,16 +241,31 @@ float smoothHrVal(float newVal) {
   return smoothed_val;
 }
 
+float smoothRespVal(float newVal) {
+  float smoothed_val;
+  if (last_resp_datapoint != 0) {
+    if (second_last_resp_datapoint != 0) {
+      smoothed_val = (second_last_resp_datapoint+last_resp_datapoint*2+newVal*3)/6;
+      second_last_resp_datapoint = last_resp_datapoint;
+    } else {
+      smoothed_val = newVal;
+      second_last_resp_datapoint = last_resp_datapoint;
+    }
+  } else {
+    smoothed_val = newVal;
+  }
+  last_resp_datapoint = newVal;
+
+  return smoothed_val;
+}
+
 void setChartColor() {
   String[] colors_array = {"grey", "blue", "green", "orange", "red"};
   String[] zones_array = {"very light", "light", "moderate", "hard", "maximum"};
   for (int i = 0; i < zones.length; ++i) {
-    println(hr);
-    println(zones[i]);
     if (hr < zones[i]) {
       hrChart.setColors("heart_rate", colors.get(colors_array[i]));
       zone_text.setText(zones_array[i]);
-      println(i+1);
       return;
     }
   }
@@ -227,10 +276,10 @@ void readFromFile() {
       String line = reader.readLine();
       inByte = float(line);
       if (!Float.isNaN(inByte))
-        changed = true;
+        hr_changed = true;
     } catch (Exception e) {
       reader = createReader("hr_data.txt");
-      changed = false;
+      hr_changed = false;
     }
 }
 
@@ -246,12 +295,24 @@ String calcHr() {
   }
 }
 
+void cacheResp(float resp) {
+   prev_resp.add(resp);
+}
+
 int getAvgHr() {
   int sum = 0;
   for (Object hr : prev_heart_rates.toArray()) {
     sum += (int) hr;
   }
   return sum/prev_heart_rates.size();
+}
+
+float getAvgRespVal() {
+  float sum = 0;
+  for (Object val : prev_resp.toArray()) {
+    sum += (float) val;
+  }
+  return sum/prev_resp.size();
 }
 
 void serialEvent (Serial myPort) {
@@ -276,7 +337,7 @@ void serialEvent (Serial myPort) {
      //Map and draw the line for new data point
      inByte = map(inByte, 0, 1023, 0, height);
      // at the edge of the screen, go back to the beginning:
-     changed = true;   
+     hr_changed = true;   
   }
 }
 
@@ -284,17 +345,23 @@ void random_shit () {
   // get the ASCII string:
    stroke(0xff, 0, 0); //Set stroke to red ( R, G, B)
    inByte = random(1023);
-   changed = true;
+   hr_changed = true;
 }
 
 void calcZones(int age) {
   for (int i = 0; i < 5; ++i) {
     zones[i] = int((220-age)*(i+5)*0.1);
   }
-  
-  println(zones);
 }
 
+double theta = 0;
+boolean up = true;
+
+float fakeBreathData() {
+  theta += 3 * Math.PI/1000;
+  resp_changed = true;
+  return (float) (Math.sin(theta) * 512) + 512;
+}
 
 // EVENT HANDLERS
 
@@ -333,5 +400,4 @@ public void Age(String theText) {
   println("a textfield event for controller 'Age' : "+theText);
   age = int(theText);
   calcZones(age);
-  println(age); 
 }
