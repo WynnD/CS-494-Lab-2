@@ -13,7 +13,7 @@ controlP5.Textarea rhymeHR_text;
 controlP5.Textarea musHR_text;
 controlP5.Textarea base_hr_text, resp_text, resp_base_text;
 BufferedReader reader;
-
+float inByteResp = 0;
 
 ArrayList prev_heart_rates, prev_resp, prev_resp_rates;
 boolean beat = true;
@@ -306,12 +306,15 @@ cp5.addButton("Reset")
 
    
    if (!use_file) {
+     println("Trying to use serial port");
     try {
     myPort = new Serial(this, Serial.list()[1], 9600);
     myPort.bufferUntil('\n');
     } catch (Exception e) {
       hr_text.setText("NO SERIAL");
     }
+  } else {
+    println("Using file");
   }
 }
 
@@ -331,10 +334,18 @@ void reset(){
     start_time = time.millis();
 }
 
+long time_diff = 0;
+
 void draw() {
   background(0x444444);
   
-  if (!retrieved_hr_avg && time.millis() - start_time > 30000) {
+  if (use_file) {
+    time_diff++;
+  } else {
+    time_diff = time.millis() - start_time;
+  }
+  
+  if (!retrieved_hr_avg && time_diff > 30000) {
     int avg = getAvgHr();
     int br_avg = getAvgBr();
     resp_base_text.setText(Float.toString(br_avg));
@@ -344,14 +355,13 @@ void draw() {
     println(resp_avg);
   }
   
-  if (!retrieved_resp_avg_val && time.millis() - start_time > 10000) {
+  if (!retrieved_resp_avg_val && time_diff > 10000) {
     resp_avg = getAvgRespVal();
     retrieved_resp_avg_val = true;
   }
   
   if (use_file) {
-    for (int i = 0; i < 5; ++i)
-      readFromFile();
+    readFromFile();
   }
   
   // detect heartbeat
@@ -373,7 +383,7 @@ void draw() {
   // end detecting heartbeat
   
   // detect breath
-  float inByteResp = fakeBreathData();
+  //float inByteResp = fakeBreathData();
   if (retrieved_resp_avg_val && !breath && inByteResp >= resp_avg) {
     breath = true;
     long breath_time = time.millis();
@@ -455,12 +465,24 @@ void setChartColor() {
 void readFromFile() {
     try {
       String line = reader.readLine();
-      inByte = float(line);
+      String array[] = line.split(", ");
+      if (array.length != 2) {
+        return;
+      }
+      String hrString = array[0];
+      String respString = array[1];
+      inByte = float(hrString);
+      inByteResp = float(respString);
       if (!Float.isNaN(inByte))
         hr_changed = true;
+      if (!Float.isNaN(inByteResp)) {
+        resp_changed = true;
+      }
     } catch (Exception e) {
+      e.printStackTrace();
       reader = createReader("hr_data.txt");
       hr_changed = false;
+      resp_changed = false;
     }
 }
 
@@ -536,8 +558,13 @@ void serialEvent (Serial myPort) {
   String inString = myPort.readStringUntil('\n');
 
   if (inString != null) {
+    String array[] = inString.split(", ");
+    inString = array[0];
+    String resp_string = array[1];
+    if (array.length != 2) {
+      return;
+    }
     // trim off any whitespace:
-    
     inString = trim(inString);
 
     // If leads off detection is true notify with blue line
@@ -548,12 +575,15 @@ void serialEvent (Serial myPort) {
     // If the data is good let it through
     else {
       stroke(0xff, 0, 0); //Set stroke to red ( R, G, B)
+      inByteResp = float(resp_string);
       inByte = float(inString); 
      }
      //Map and draw the line for new data point
-     inByte = map(inByte, 0, 1023, 0, height);
+     //  inByte = map(inByte, 0, 1023, 0, height);
+     //  inByteResp = map(inByteResp, 0, 1023, 0, height);
      // at the edge of the screen, go back to the beginning:
-     hr_changed = true;   
+     hr_changed = true;
+     resp_changed = true;
   }
 }
 
