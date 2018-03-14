@@ -9,8 +9,8 @@ Clock time;
 Serial myPort;
 controlP5.Textarea hr_text;
 controlP5.Textarea zone_text;
-controlP5.Textarea rhymeHR_text;
-controlP5.Textarea musHR_text;
+controlP5.Textarea riddleHR_text, riddleRESP_text;
+controlP5.Textarea musHR_text, musRESP_text;
 controlP5.Textarea base_hr_text, resp_text, resp_base_text;
 BufferedReader reader;
 float inByteResp = 0;
@@ -18,10 +18,8 @@ float inByteResp = 0;
 ArrayList prev_heart_rates, prev_resp, prev_resp_rates;
 boolean beat = true;
 boolean breath = true;
-boolean use_file = true;
 int xPos = 1;
-int hr;
-int br;
+int hr, br;
 float height_old = 0;
 float height_new = 0;
 float inByte = 0;
@@ -46,16 +44,22 @@ float last_resp_datapoint = 0;
 float second_last_resp_datapoint = 0;
 HashMap<String, Integer> colors;
 boolean start= false;
+boolean use_file = false;
+boolean riddleE = false;
+boolean musicE = false;
 
 void setup() {
   prev_heart_rates = new ArrayList<Integer>();
   prev_resp = new ArrayList<Float>();
   prev_resp_rates = new ArrayList<Integer>();
   reader = createReader("hr_data.txt");
-  try {
-    use_file = reader.ready();
-  } catch (Exception e) {
-    use_file = false;
+  if (use_file) {
+    try {
+      use_file = reader.ready();
+    } catch (Exception e) {
+      e.printStackTrace();
+      use_file = false;
+    }
   }
   PFont pfont = createFont("arial",30);
   ControlFont font = new ControlFont(pfont,18);
@@ -70,6 +74,8 @@ void setup() {
   colors.put("green", #00FF00);
   colors.put("blue", #00BFFF);
   colors.put("grey", #F0F8FF);
+  colors.put("pink", #FFB6C1);
+  colors.put("white", #FFFFFF);
 
   zones = new int[5];
   hrChart = cp5.addChart("hr chart")
@@ -82,7 +88,7 @@ void setup() {
   respChart = cp5.addChart("resp chart")
               .setPosition(220, 315)
               .setSize(980, 300)
-              .setRange(1023, 0)
+              .setRange(0, 1023)
               .setView(Chart.LINE) // use Chart.LINE, Chart.PIE, Chart.AREA, Chart.BAR_CENTERED
               .setStrokeWeight(2.5)
               ;
@@ -98,7 +104,10 @@ void setup() {
   size(1200,615);
   background(0x444444);
   
-  // create a new button with name 'buttonA'
+
+  /***************************************************************************************************/
+  /*******************************************TABS********************************************************/
+  /***************************************************************************************************/
   cp5.addTab("Fitness Mode")
      .setValue(0)
      .setPosition(10,10)
@@ -137,6 +146,13 @@ void setup() {
      .setId(3)
      ;
      
+  cp5.getTab("default").hide();
+     
+     
+  /***************************************************************************************************/
+  /***********************Fitness Sections***************************************************************************/
+  /***************************************************************************************************/
+     
      
    cp5.addTextfield("Age")
      .setPosition(10,150)
@@ -148,180 +164,226 @@ void setup() {
      ;
      
        cp5.getController("Age").moveTo("Fitness Mode");
-     
-   
-   cp5.addTextlabel("RESP base label")
-     .setFont(createFont("arial",25))
-     .setPosition(10, 440)
-     .setValue("Base RESP:");
-   resp_base_text = cp5.addTextarea("RESP base")
-     .setFont(createFont("arial",25))
-     .setPosition(150,440)
-     ;
-     
-   cp5.getController("RESP base label").moveTo("global");
-   //cp5.getController("RESP base").moveTo("global");
-
-   cp5.addTextlabel("RESP label")
-     .setFont(createFont("arial",25))
-     .setPosition(10, 470)
-     .setValue("RESP Rate:");
-   resp_text = cp5.addTextarea("RESP")
-     .setFont(createFont("arial",25))
-     .setPosition(150,470)
-     ;
-     
-     cp5.getController("RESP label").moveTo("global");
-    // cp5.getController("RESP").moveTo("global");
-
-     
-
+       
+       
+       
    cp5.addTextlabel("Zone label")
-     .setFont(createFont("arial",25))
+     .setFont(createFont("arial",20))
      .setPosition(10, 210)
      .setValue("Zone:");
    zone_text = cp5.addTextarea("Zone")
-     .setFont(createFont("arial", 25))
+     .setFont(createFont("arial", 20))
      .setPosition(90, 210)
      .setText("N/A")
      ;
      cp5.getController("Zone label").moveTo("Fitness Mode");
      zone_text.moveTo("Fitness Mode");
+     
 
-     
-     
-   cp5.addTextlabel("Avg HR label")
-     .setFont(createFont("arial", 25))
-     .setPosition(10, 530)
-     .setValue("Base HR:")
+  /***************************************************************************************************/  
+  /**********************GLOBAL*****************************************************************************/
+  /***************************************************************************************************/
+   cp5.addTextlabel("RESP base label")
+     .setFont(createFont("arial",20))
+     .setPosition(10, 460)
+     .setValue("BASE RESP Rate:");
+   resp_base_text = cp5.addTextarea("RESP base")
+     .setFont(createFont("arial",20))
+     .setPosition(180,460)
      ;
+     
+   cp5.getController("RESP base label").moveTo("global");
+   resp_base_text.moveTo("global");
+   
+   
+
+   cp5.addTextlabel("RESP label")
+     .setFont(createFont("arial",20))
+     .setPosition(10, 485)
+     .setValue("RESP Rate:");
+   resp_text = cp5.addTextarea("RESP")
+     .setFont(createFont("arial",20))
+     .setPosition(160,485)
+     ;
+     
+     cp5.getController("RESP label").moveTo("global");
+    resp_text.moveTo("global");
+    
+    
+    
+    cp5.addTextlabel("Avg HR label")
+     .setFont(createFont("arial", 20))
+     .setPosition(10, 510)
+     .setValue("BASE HR:")
+     ;
+     
    base_hr_text = cp5.addTextarea("Avg HR")
-     .setFont(createFont("arial", 25))
-     .setPosition(130, 530)
+     .setFont(createFont("arial", 20))
+     .setPosition(160, 510)
      .setText("N/A")
      ;
+
    cp5.getController("Avg HR label").moveTo("global");
    base_hr_text.moveTo("global");
+   
+   
 
    cp5.addTextlabel("HR label")
-     .setFont(createFont("arial",25))
-     .setPosition(10, 560)
+     .setFont(createFont("arial",20))
+     .setPosition(10, 535)
      .setValue("HR:");
+     
    hr_text = cp5.addTextarea("HR")
-     .setFont(createFont("arial",25))
-     .setPosition(60,560)
+     .setFont(createFont("arial",20))
+     .setPosition(160,535)
      ;
+     
   cp5.getController("HR label").moveTo("global");
   hr_text.moveTo("global");
 
   
      cp5.getController("resp chart").moveTo("global");
      cp5.getController("hr chart").moveTo("global");
-
-cp5.addButton("Reset")
-.setPosition(10,100)
-     .setSize(200,30)
-     .setValue(0)
-//     .setFont(button_font)
-     ;
      
+     
+     cp5.addButton("Reset")
+     .setPosition(10,100)
+     .setSize(200,30)
+     ; 
      cp5.getController("Reset").moveTo("global");
      
      cp5.addButton("Start")
      .setPosition(10, 50)
-     .setSize(200,30);
-//     .setFont(createFont("arial", 25));
+     .setSize(200,30)
+     ;
      cp5.getController("Start").moveTo("global");
+    
+    
+  /***************************************************************************************************/
+  /*******************STRESS MODE********************************************************************************/
+  /***************************************************************************************************/
 
      
-     
-  cp5.addButton("Music Start")
+  cp5.addButton("MusicStart")
   .setPosition(10,100)
-     .setSize(190,30)
-     .setValue(0)
-     //.setFont(createFont("arial", 25))
+     .setSize(190,25)
+     .setCaptionLabel("Music Start")
      ;
-     cp5.addButton("Music End")
-  .setPosition(10,135)
-     .setSize(190,30)
-     .setValue(0)
-     //.setFont(createFont("arial", 25))
+     cp5.addButton("MusicEnd")
+  .setPosition(10,130)
+     .setSize(190,25)
+     .setCaptionLabel("Music End")
      ;
      
-     cp5.getController("Music Start").moveTo("StressMode");
-     cp5.getController("Music End").moveTo("StressMode");
+     cp5.getController("MusicStart").moveTo("StressMode");
+     cp5.getController("MusicEnd").moveTo("StressMode");
      
      
      cp5.addTextlabel("HRMus")
-     .setFont(createFont("arial",25))
-     .setPosition(10, 165)
+     .setFont(createFont("arial",20))
+     .setPosition(10, 160)
      .setValue("Avg HR:");
-   musHR_text = cp5.addTextarea("MusHR")
-     .setFont(createFont("arial", 25))
-     .setPosition(100, 165)
+     musHR_text = cp5.addTextarea("MusHR")
+     .setFont(createFont("arial", 20))
+     .setPosition(100, 160)
+     .setText("N/A")
+     ;
+      cp5.getController("HRMus").moveTo("StressMode");
+      musHR_text.moveTo("StressMode");
+      
+      
+      
+      cp5.addTextlabel("RESPMus")
+     .setFont(createFont("arial",20))
+     .setPosition(10, 185)
+     .setValue("Avg RESP:");
+     musRESP_text = cp5.addTextarea("RESPM")
+     .setFont(createFont("arial", 20))
+     .setPosition(120, 185)
      .setText("N/A")
      ;
      
-      cp5.getController("HRMus").moveTo("StressMode");
-      musHR_text.moveTo("StressMode");
-      //cp5.getController("MusHR").moveTo("StressMode");
+      cp5.getController("RESPMus").moveTo("StressMode");
+      musRESP_text.moveTo("StressMode");     
 
 
 
     
      
-     cp5.addButton("Rhyme Start")
-     .setPosition(10,205)
-     .setSize(190,30)
-     .setValue(0)
-     //.setFont(createFont("arial", 25))
+     cp5.addButton("RiddleStart")
+     .setPosition(10,230)
+     .setSize(190,25)
+     .setCaptionLabel("Riddle Start")
      ;
-     cp5.addButton("Rhyme End")
-     .setPosition(10,240)
-     .setSize(190,30)
-     .setValue(0)
-     //.setFont(createFont("arial", 25))
+     cp5.addButton("RiddleEnd")
+     .setPosition(10,260)
+     .setSize(190,25)
+     .setCaptionLabel("Riddle End")
      ;
      
      
-     cp5.getController("Rhyme Start").moveTo("StressMode");
-
-     cp5.getController("Rhyme End").moveTo("StressMode");
+     cp5.getController("RiddleStart").moveTo("StressMode");
+     cp5.getController("RiddleEnd").moveTo("StressMode");
      
      
-     cp5.addTextlabel("RhymeLabel")
-     .setFont(createFont("arial",25))
-     .setPosition(10, 270)
+     cp5.addTextlabel("RiddleLabel")
+     .setFont(createFont("arial",20))
+     .setPosition(10, 290)
      .setValue("Avg HR:");
-   rhymeHR_text = cp5.addTextarea("rhymeHR")
-     .setFont(createFont("arial", 25))
-     .setPosition(100, 270)
+   riddleHR_text = cp5.addTextarea("riddleHR")
+     .setFont(createFont("arial", 20))
+     .setPosition(100, 290)
      .setText("N/A")
+     ;  
+     cp5.getController("RiddleLabel").moveTo("StressMode");
+     riddleHR_text.moveTo("StressMode");
+     
+     
+      cp5.addTextlabel("RiddleLabelRESP")
+     .setFont(createFont("arial",20))
+     .setPosition(10, 315)
+     .setValue("Avg RESP:");
+     riddleRESP_text = cp5.addTextarea("riddleRESP")
+     .setFont(createFont("arial", 20))
+     .setPosition(120, 315)
+     .setText("N/A")
+     ;  
+     cp5.getController("RiddleLabelRESP").moveTo("StressMode");
+     riddleRESP_text.moveTo("StressMode");
+     
+ /***************************************************************************************************/
+ /*******************MEDITATION MODE********************************************************************************/
+ /***************************************************************************************************/
+ cp5.addButton("MeditationButt")
+     .setPosition(5,100)
+     .setSize(200,25)
+     .setCaptionLabel("Start Meditation")
      ;
-     
-     cp5.getController("RhymeLabel").moveTo("StressMode");
+ 
+ cp5.getController("MeditationButt").moveTo("Meditation Mode");
+ 
+  /***************************************************************************************************/
+  /***************************************************************************************************/
+  /***************************************************************************************************/
 
-     rhymeHR_text.moveTo("StressMode");
      
+        
 
    
    if (!use_file) {
-     println("Trying to use serial port");
+    println("Trying to use serial port");
     try {
-    myPort = new Serial(this, Serial.list()[1], 9600);
+    myPort = new Serial(this, Serial.list()[0], 9600);
     myPort.bufferUntil('\n');
     } catch (Exception e) {
       hr_text.setText("NO SERIAL");
     }
-  } else {
+   } else {
     println("Using file");
   }
 }
 
-boolean retrieved_hr_avg = false;
-boolean retrieved_resp_avg_val = false;
-
-void reset(){
+void resets(){
     retrieved_hr_avg = false;
     retrieved_resp_avg_val = false;
     resp_avg = -1;
@@ -332,20 +394,14 @@ void reset(){
     base_hr_text.setText("N/A");
     resp_base_text.setText("N/A");
     start_time = time.millis();
+    hrChart.setColors("heart_rate", colors.get("white"));
+    respChart.setColors("resp_rate", colors.get("white"));
 }
-
-long time_diff = 0;
 
 void draw() {
   background(0x444444);
   
-  if (use_file) {
-    time_diff++;
-  } else {
-    time_diff = time.millis() - start_time;
-  }
-  
-  if (!retrieved_hr_avg && time_diff > 30000) {
+  if (!retrieved_hr_avg && start == true && time.millis() - start_time > 30000) {
     int avg = getAvgHr();
     int br_avg = getAvgBr();
     resp_base_text.setText(Float.toString(br_avg));
@@ -353,19 +409,47 @@ void draw() {
     retrieved_hr_avg = true;
     println("retrieved avg hr and resp rate");
     println(resp_avg);
+    hrChart.setColors("heart_rate", colors.get("white"));
+    respChart.setColors("resp_rate", colors.get("white"));
+    println(last_beat);
   }
-  
-  if (!retrieved_resp_avg_val && time_diff > 10000) {
+
+  if (!retrieved_resp_avg_val && time.millis() - start_time > 10000) {
     resp_avg = getAvgRespVal();
     retrieved_resp_avg_val = true;
   }
-  
-  if (use_file) {
-    readFromFile();
+  if (musicE == true){
+    int avg = getAvgHr();
+    int br_avg = getAvgBr();
+    musHR_text.setText(Float.toString(avg));
+    musRESP_text.setText(Integer.toString(br_avg));
+    println("retrieved avg hr and resp rate");
+    println(resp_avg);
+   // hrChart.setColors("heart_rate", colors.get("white"));
+    //respChart.setColors("heart_rate", colors.get("white"));
+    musicE = false;
   }
   
-  // detect heartbeat
-  if (!beat && inByte > 700) {
+  if (riddleE == true ){
+    
+    int avg = getAvgHr();
+    int br_avg = getAvgBr();
+    riddleHR_text.setText(Float.toString(avg));
+    riddleRESP_text.setText(Integer.toString(br_avg));
+    retrieved_hr_avg = true;
+    println("retrieved avg hr and resp rate");
+    println(resp_avg);
+    //hrChart.setColors("heart_rate", colors.get("white"));
+   // respChart.setColors("heart_rate", colors.get("white"));
+    riddleE = false;
+  }
+  
+  if (use_file) {
+    for (int i = 0; i < 5; ++i)
+      readFromFile();
+  }
+  
+   if (!beat && inByte > 700) {
     beat = true;
     long beat_time = time.millis();
     if (last_beat != 0) {
@@ -380,10 +464,8 @@ void draw() {
   if (beat && inByte < 700) {
     beat = false;
   }
-  // end detecting heartbeat
   
   // detect breath
-  //float inByteResp = fakeBreathData();
   if (retrieved_resp_avg_val && !breath && inByteResp >= resp_avg) {
     breath = true;
     long breath_time = time.millis();
@@ -462,6 +544,7 @@ void setChartColor() {
   }
 }
 
+
 void readFromFile() {
     try {
       String line = reader.readLine();
@@ -480,7 +563,7 @@ void readFromFile() {
       }
     } catch (Exception e) {
       e.printStackTrace();
-      reader = createReader("hr_data.txt");
+      reader = createReader("hr_data1.txt");
       hr_changed = false;
       resp_changed = false;
     }
@@ -543,6 +626,10 @@ int getAvgBr() {
   }
   return sum/n;
 }
+/**********************************************************************************************************************/
+/**********************************************************************************************************************/
+
+
 
 float getAvgRespVal() {
   float sum = 0;
@@ -553,19 +640,50 @@ float getAvgRespVal() {
   return sum/prev_resp.size();
 }
 
+
+ /***************************************************************************************************/
+ /*******************START/RESET********************************************************************************/
+ /***************************************************************************************************/
+  boolean retrieved_hr_avg = false;
+  boolean retrieved_resp_avg_val = false;
+  
+  void starts(){
+      hrChart.setColors("heart_rate", colors.get("pink"));
+      respChart.setColors("resp_rate", colors.get("pink"));
+      start = true;
+      start_time = time.millis();
+      //prev_heart_rates = new ArrayList<Integer>();
+      prev_resp = new ArrayList<Float>();
+      prev_resp_rates = new ArrayList<Integer>();
+      retrieved_hr_avg = false;
+      retrieved_resp_avg_val = false;
+      resp_avg = -1;
+      resp_avg_val = 0;
+      //prev_heart_rates.clear();
+      //prev_resp.clear();
+      
+  }
+   /***************************************************************************************************/
+  /***************************************************************************************************/
+  /***************************************************************************************************/
+
 void serialEvent (Serial myPort) {
   // get the ASCII string:
   String inString = myPort.readStringUntil('\n');
 
   if (inString != null) {
     String array[] = inString.split(", ");
-    inString = array[0];
-    String resp_string = array[1];
     if (array.length != 2) {
+      println("input was !");
       return;
     }
+    
+    inString = array[0];
+    String resp_string = array[1];
+    println(resp_string);
     // trim off any whitespace:
     inString = trim(inString);
+    resp_string = trim(resp_string);
 
     // If leads off detection is true notify with blue line
     if (inString.equals("!")) { 
@@ -604,9 +722,13 @@ float fakeBreathData() {
 
 // EVENT HANDLERS
 
+ /***************************************************************************************************/
+  /*******************EVENT HANDLERS********************************************************************************/
+  /***************************************************************************************************/
+
 public void controlEvent(ControlEvent theEvent) {
  // println(theEvent.getController().getName());
-  if (theEvent.isTab()) {
+ /* if (theEvent.isTab()) {
     println("got an event from tab : "+theEvent.getTab().getName()+" with id "+theEvent.getTab().getId());
   }
   else if(theEvent.isAssignableFrom(Textfield.class)) {
@@ -617,13 +739,12 @@ public void controlEvent(ControlEvent theEvent) {
   else{
     println(theEvent.getController().getName());
 
-  }
+  }*/
 
 }
 
 public void Start( ){
-      hrChart.setColors("heart_rate", colors.get("orange"));
-      start = true;
+      starts();
 }
 
 
@@ -634,6 +755,31 @@ public void Age(String theText) {
   calcZones(age);
 }
 
-public void Reset(int theValue){
-  reset();
+public void Reset(){
+  resets();
+}
+
+public void RiddleStart(){
+  prev_heart_rates = new ArrayList<Integer>();
+  prev_resp = new ArrayList<Float>();
+  prev_resp_rates = new ArrayList<Integer>();
+}
+
+public void RiddleEnd(){
+  riddleE = true;
+}
+
+public void MusicStart(){
+   prev_heart_rates = new ArrayList<Integer>();
+   prev_resp = new ArrayList<Float>();
+   prev_resp_rates = new ArrayList<Integer>();
+ }
+
+public void MusicEnd(){
+    musicE = true;
+}
+
+public void Meditation(){
+  myPort.write(1);
+
 }
